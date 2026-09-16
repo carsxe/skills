@@ -5,9 +5,10 @@ repository is available.
 
 The premise: **code that has been fixed before is more likely to be fixed wrong again.**
 A repeat fix means either the earlier attempts treated symptoms, or the code path has a
-property nobody has fully understood. Both are reasons for a human to look, and both
-produce the highest-value comment you can leave — "the last attempt at this missed X;
-does this one handle it?"
+property nobody has fully understood. Both are reasons to look harder. Human review
+fires only when you actually find a revert, hotfix, or repeat-fix chain. Both produce
+the highest-value comment you can leave — "the last attempt at this missed X; does
+this one handle it?"
 
 ## Contents
 
@@ -172,7 +173,7 @@ That paragraph is worth more than the rest of the review.
 
 | Observation                                                                 | How to use it                                                                                                                                          |
 | --------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Previous fix in this path reverted or hotfixed within days                  | +1 criticality tier, automatic human-review gate, and a direct question to the author                                                                  |
+| Previous fix in this path reverted or hotfixed within days                  | +1 criticality tier, human-review gate (only because you found the chain), and a direct question to the author                                          |
 | This is the 3rd+ attempt at the same behavior                               | Make root-cause a blocking question: "attempts 1 and 2 patched the caller; this patches a third caller — should the fix be in `normalizeX()` instead?" |
 | A past reviewer's concern is reintroduced here                              | High-confidence finding, cite the PR number                                                                                                            |
 | Previous fix shipped with a regression test; this one deletes or weakens it | Blocking. The test is the only reason the bug stayed fixed.                                                                                            |
@@ -194,7 +195,7 @@ Two hard rules:
 | Full repo + `gh`   | All five levels                                                                                                           |
 | Full repo, no `gh` | Levels 1–4; note that PR discussion was unavailable                                                                       |
 | Shallow clone      | `git fetch --unshallow` if cheap; otherwise say history depth was limited                                                 |
-| Pasted diff only   | Skip entirely. Write "History: not checked (no repository access)." For P0/P1, this alone keeps the PR out of self-merge. |
+| Pasted diff only   | Skip entirely. Write "History: not checked (no repository access)." Skipping is a note, not a gate. |
 
-Missing history is not a neutral condition on a critical PR. It is a known unknown, and
-the gate treats it as one.
+Missing history is a note. It is not a Gate 2 trigger. Only a revert, hotfix, or
+repeat-fix chain you actually found is.

@@ -1,14 +1,16 @@
 # Criticality classification reference
 
-Read this when tiering is ambiguous, when the repo is unfamiliar, or when a tier
-decision is about to drive a merge gate you are unsure about.
+Read this when tiering is ambiguous, when the repo is unfamiliar, or when you are
+unsure whether a hunk actually reaches money, access, data, or an external contract.
 
 ## Contents
 
 - [The one-question test](#the-one-question-test)
+- [The hunk test](#the-hunk-test)
 - [P0 surfaces in detail](#p0-surfaces-in-detail)
 - [P1 surfaces in detail](#p1-surfaces-in-detail)
 - [P2 and P3](#p2-and-p3)
+- [Email and notifications](#email-and-notifications)
 - [Signal vocabulary](#signal-vocabulary)
 - [Reversibility test](#reversibility-test)
 - [Consumer-count heuristic](#consumer-count-heuristic)
@@ -32,6 +34,22 @@ that happens before anyone notices?**
 
 "Before anyone notices" is the important clause. Silent wrongness ranks above loud
 breakage at the same scope, because loud breakage gets fixed in an hour.
+
+## The hunk test
+
+The tier applies only if the **changed lines** can produce that worst outcome.
+
+- A type-only or comment change in `packages/billing` is P3, not P0.
+- A dashboard component that happens to sit next to a usage number, without
+  computing it, is P2/P3, not P0.
+- Importing a payment module is a reason to open the hunk, not a reason to assign P0.
+- User-facing ≠ P0/P1. Loud, revertible UI and copy are P2. Elevate only when the
+  changed lines compute or authorize money/access, or change a public contract.
+- Jobs, queues, webhooks, and email workflows stay P1 for *how hard you look*
+  (retries, idempotency, recipients). They are not an automatic human-review gate.
+
+If after opening the hunk the lines cannot move money, access, data, or external
+contracts, lower the tier. "Could be P0" before reading is a reason to look.
 
 ---
 
@@ -76,6 +94,10 @@ Removal and renaming are obvious. The subtler P0s: changing a default value, tig
 validation that previously accepted something, changing null vs absent, changing
 ordering that clients depend on, changing an error code.
 
+Adding an optional field is P0 *scrutiny* until you confirm it is additive and
+optional. Once you have, it can self-merge. Strict parsers are a reason to look, not
+an automatic human gate on a confirmed-optional field.
+
 ### Secrets and production configuration
 
 Key handling, credential rotation, environment variable semantics, IAM and service
@@ -85,6 +107,9 @@ changes what runs in production or with what privileges.
 ---
 
 ## P1 surfaces in detail
+
+P1 sets how hard you look (retries, idempotency, cache keys, shared callers). A
+tested or observed P1 change self-merges. P1 is not an automatic human-review gate.
 
 - **Shared/core modules**: anything imported by many features. Use the consumer-count heuristic below rather than intuition.
 - **Async infrastructure**: queues, workers, cron jobs, schedulers, retry and backoff policy, idempotency keys, dead-letter handling.
@@ -103,7 +128,8 @@ P2 is the healthy default for feature work. Contained, loud on failure, revertib
 
 Do not inflate P2 to P1 because the feature is important to the business. Importance is
 not blast radius. A prominent dashboard breaking is visible and fixable; a shared
-rounding helper breaking is invisible and expensive.
+rounding helper breaking is invisible and expensive. User-facing screens are P2 unless
+the changed lines compute or authorize money/access.
 
 P3 requires that the change is genuinely non-behavioral. Verify before you claim it:
 
@@ -111,6 +137,18 @@ P3 requires that the change is genuinely non-behavioral. Verify before you claim
 - A "test-only" PR that weakens or deletes assertions is not P3 — it removes detection, which is a P1/P2 concern.
 - A "formatting-only" PR that reflows a template string, a regex, or YAML indentation is not P3.
 - A rename is only P3 if every reference is updated _and_ nothing resolves the old name dynamically (string lookups, reflection, serialized values, DB-stored identifiers, API params).
+
+## Email and notifications
+
+Unsendability means you must verify content, recipients, and trigger. It does not by
+itself require a human, and it does not make every mail change P0.
+
+| Change | Tier | Merge if verified |
+| --- | --- | --- |
+| Subject, copy, styling, template layout | P3 | Self-merge |
+| Delay, retry schedule, which internal workflow step sends it | P2 | Self-merge |
+| Recipients, unsubscribe, or whether a message sends | P1 | Self-merge if tests/observed |
+| Amounts, entitlements, receipts, password-reset/auth links, billed invoices | P0 | Self-merge only if intent is stated **and** content/recipients/amounts were observed |
 
 ---
 
@@ -145,12 +183,17 @@ Ask: **if this is wrong at 2am, what does the fix require?**
 | Revert the commit and redeploy                                                                                | none                                                      |
 | Flip a feature flag                                                                                           | −1 tier (only if the flag genuinely gates every new path) |
 | Revert plus a data repair script                                                                              | +1 tier                                                   |
-| Revert plus contacting customers, reissuing invoices, or cleaning up provider-side state                      | +1 tier, and human review regardless of tier              |
-| Cannot be undone (deleted data with no backup, published package version, sent emails, external side effects) | P0                                                        |
+| Revert plus contacting customers, reissuing invoices, or cleaning up provider-side state                      | +1 tier; human review only if that side effect was not verified |
+| Cannot be undone (deleted data with no backup, published package version, mail already blasted)               | P0 scrutiny; verify content/recipients/trigger. Unsendability is not an automatic human stamp. |
+
+Apply +1 when revert cannot restore **customer-visible state that already happened**
+(money moved, data deleted, package published, mail already blasted). A workflow
+config, template, delay, or unshipped email change is still revertible — do not +1 it.
 
 Irreversibility is the modifier reviewers most often skip. A P2 feature change that
 writes a bad value into a table users will edit over the next week is not a P2 problem
-anymore — the code revert no longer fixes it.
+anymore — the code revert no longer fixes it. An email delay that has not shipped is
+still a P2 problem.
 
 ---
 
@@ -182,11 +225,12 @@ sites across 3 packages" is evidence; "widely used" is not.
 
 ---
 
-## Deriving the deny-list from the repo itself
+## Deriving the scrutiny list from the repo itself
 
 The tier tables in this file are a generic starting point. A repo's real high-blast-radius
 areas are recorded in its own incident history, and mining them beats inheriting someone
 else's list. Do this once per repo and write the result into a project criticality file.
+The result is a **look-harder list**, not a path deny-list for the merge gate.
 
 ```bash
 # Files that have been reverted or hotfixed — empirical blast radius
@@ -215,10 +259,13 @@ history explains where pain happened, not where policy should sit.
 The repo's own configuration outranks this file. Before tiering an unfamiliar repo,
 check for and honor:
 
-- `CODEOWNERS` — paths with dedicated owners are at least P1; paths owned by a security, platform, or billing team are P0 candidates.
+- `CODEOWNERS` — a routing hint for *who* to name if a human review fires. Paths with
+  dedicated owners are not automatically P1. Security, platform, or billing owners are
+  a reason to look harder, not a reason to gate. CODEOWNERS is a merge gate only if
+  branch protection or required reviews actually demand that approval.
 - `CLAUDE.md`, `AGENTS.md`, `.cursor/rules/`, `.greptile/` — explicit team rules and danger zones.
 - `CONTRIBUTING.md` — stated review requirements.
-- Branch protection and required checks — if the repo already demands approval for a path, never issue SELF-MERGE OK for it.
+- Branch protection and required checks — if the repo already demands approval for a path, never issue SELF-MERGE OK for it; name that policy.
 - A project-specific criticality file if one exists (e.g. `.pr-review/criticality.md`) — read it and let it override the defaults here.
 
 If the repo disagrees with this reference, the repo wins. Say which rule you applied.
@@ -240,35 +287,55 @@ actual tree — module layout changes and this map is a starting point, not trut
 | Vehicle identity resolution (VIN decode/normalization)                                                            | **P1**                               | Feeds every downstream product; wrong normalization is silent and corrupts caches                         |
 | Plate lookup, vehicle history data pipelines                                                                      | **P1**                               | Upstream provider integrations; parsing changes fail silently on subsets of records                       |
 | Upstream data-provider clients, retries, rate limits, caching                                                     | **P1**                               | Provider cost and quota exposure; retry bugs can multiply spend                                           |
-| Background jobs, workers, scheduled refresh                                                                       | **P1**                               |                                                                                                           |
 | Elysia route handlers for internal/non-public endpoints                                                           | **P2**                               | P1 if shared middleware is touched                                                                        |
-| Dashboard, docs site, marketing pages, internal tooling                                                           | **P2/P3**                            | P2 when it displays billing or usage numbers                                                              |
+| Dashboard, docs site, marketing pages, internal tooling                                                           | **P2/P3**                            | P2 for feature UI. P0 only when the changed lines *compute or authorize* a price, quota, or entitlement — not because a price is displayed nearby |
 | Demo/video rendering, folder-structure viewer, internal scripts                                                   | **P3**                               |                                                                                                           |
+| Email/notification templates, subjects, styling                                                                   | **P3**                               | See the email overlay. Delay/workflow routing is P2; amounts/auth links/receipts are P0                      |
+| Background jobs, workers, scheduled refresh                                                                       | **P1** scrutiny                      | Self-merge when the changed behavior is tested or observed. Not an automatic human gate.                   |
 
 Cross-cutting CarsXE rules:
 
-- Anything that changes **how a request is counted or billed** is P0 regardless of file location. Quota decrements often live far from the billing module.
+- Anything that changes **how a request is counted or billed** is P0 regardless of file location. Quota decrements often live far from the billing module. A file in `billing/` that does not change counts or amounts is not P0.
 - Anything that changes **VIN or plate normalization** is P1 minimum and needs a cache-invalidation answer: previously cached results were computed under the old rules.
 - Anything that changes **upstream provider request shape or retry policy** is P1 — it spends real money per call and can trip provider rate limits in production only.
-- API response shape changes are **breaking for paying integrators** unless versioned. Treat "we'll just add a field" as P0 until you have confirmed no client parses strictly.
+- API **breaking** shape changes (rename, remove, default, type) are P0 for paying integrators unless versioned. Adding a confirmed-optional field is P0 scrutiny, then self-merges if observed.
 
 ---
 
 ## Worked tiering examples
 
-**One-line change to a constant in `packages/billing/src/plan-limits.ts`**
-Surface P0 (money), class contract/behavior change, reversible by revert but wrong
-invoices already generated → +1 modifier is unnecessary; already P0. **P0, human review.**
+**Comment or TypeScript type-only change in `packages/billing`**
+Surface looks like money, hunk does not compute or display an amount → **P3,
+self-merge.** Neighborhood is not blast radius.
+
+**Email workflow delay 1h → 2h, test updated, no recipient or amount change**
+Surface job/notification, class behavior, revertible until shipped → **P2,
+self-merge.** Unsendability is irrelevant; nothing has been sent.
+
+**Receipt email that changes the billed amount in the template**
+Surface P0 (money in the payload). Self-merge only if the PR states the new amount
+and a test or preview asserts it. Unexplained amount change → human review (intent
+unverified), not because "emails are P0".
+
+**Dashboard copy next to a usage number, computation untouched**
+Surface P3/P2 presentation → **self-merge.** Displaying a price nearby does not
+inherit P0.
+
+**`OVERAGE_RATE_CENTS` 4 → 3 in `packages/billing/src/plan-limits.ts`**
+Surface P0 (money), class contract/behavior. If the PR says "new published price"
+and a test asserts 3 → **P0, self-merge, observed.** Same change with no stated
+intent → **human review** (ambiguous product question), not because pricing always
+needs a human.
 
 **300-line refactor of the dashboard's chart components**
 Surface P2, class behavior change, no shared modules touched, reversible → **P2**. If
-tests exist and coverage was full: self-merge.
+coverage was full: self-merge.
 
 **Adding an optional field to a public API response**
-Surface P0 (public contract), class additive → additive normally reduces a tier, but
-this is an external contract with unknown consumers, and strict parsers break on
-unexpected fields → **stays P0**. Additive only reduces a tier when you can verify who
-consumes it.
+Surface P0 (public contract), class additive. Confirm the field is optional and
+documented. Additive optional with unknown consumers is P0 *scrutiny*; if you
+confirmed it is optional → **self-merge**. Rename/remove/default/type change with
+unknown consumers stays Gate 2.6 (human review).
 
 **Renaming an internal helper across 40 files**
 Surface P2, class non-behavioral _if_ every reference is updated → verify no dynamic
@@ -278,19 +345,20 @@ param, it is not a rename — it is a contract change.
 **Bumping a logging library patch version**
 Dependency class, runs in production → **P1 floor**. Check the changelog for output
 format changes; log-format changes can break alert parsing, which is the detection layer
-for everything else.
+for everything else. Self-merge if changelog is clean and the bump is observed in CI.
 
 **Adding an index to a 40M-row table**
-Surface P1 (schema), but the migration can lock the table on deploy → concurrency and
-lock behavior make this an ops question. **P1, human review** — specifically someone with
-production DB context.
+Surface P1 (schema), lock risk on deploy. Demand observation of the migration plan
+(CONCURRENTLY / lock timeout). Human review if lock behavior is unverified; not
+automatic because "it's a migration."
 
 ---
 
 ## When tiering is genuinely ambiguous
 
-If you cannot decide between two tiers after opening the hunks, pick the higher one and
-say why it was close. Tighten, never loosen. Then name the single fact that would settle
-it — "if `computeQuota()` is only called from the admin backfill script this is P2; it is
-P0 if the request path calls it" — so the next reviewer resolves the ambiguity once
-instead of re-deriving it.
+If you cannot decide between two tiers after opening the hunks, pick the higher one
+and say why it was close. Then name the single fact that would settle it — "if
+`computeQuota()` is only called from the admin backfill script this is P2; it is P0
+if the request path calls it." After you have that fact, **lower the tier** if the
+hunk cannot produce the worse outcome. "Could be P0" before reading is not a merge
+gate.

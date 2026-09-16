@@ -36,10 +36,10 @@ Do not behave like a generic linter. Prefer 3 excellent findings over 15 weak on
 
 Every run produces four things, not one:
 
-1. **Criticality classification** — what surfaces this PR touches and how critical they are (P0/P1/P2/P3), derived from evidence, not vibes.
+1. **Criticality classification** — what surfaces this PR touches and how critical they are (P0/P1/P2/P3), derived from the changed lines, not folder names. Criticality sets scrutiny, not the merge verdict.
 2. **Findings** — the review itself, evidence-backed and PR-scoped.
 3. **Break analysis + verification** — what this change could plausibly break, and what was actually observed versus merely reasoned about.
-4. **Merge decision** — self-merge OK, human review required (and _which_ human), or blocked. This is a gate with hard rules, not a feeling.
+4. **Merge decision** — self-merge OK, human review required (and _which_ human), or blocked. Driven by verification and unresolved risk, not by surface labels.
 
 Never emit findings without the classification and the merge decision. The merge
 decision is the part the author acts on first.
@@ -59,7 +59,7 @@ Step 5  Write the review
 ```
 
 Steps 2.6 and 2.7 are skippable **only** when the repository is not available (pasted
-diff). If skipped, say so — it downgrades merge eligibility for anything above P2.
+diff). If skipped, say so. Skipping is a note, not a merge-eligibility downgrade.
 
 ---
 
@@ -103,19 +103,24 @@ The best review catches contract mismatches across files. Trace changed callers,
 callees, routes, validators, query keys, schemas, migrations, generated types,
 feature flags, permissions, and tests when relevant.
 
-### 6. The merge gate is conservative and asymmetric
+### 6. The merge gate is asymmetric on unknowns, not surfaces
 
-The cost of wrongly saying "human review required" is a few minutes of someone's time.
-The cost of wrongly saying "safe to self-merge" is a production incident on a system
-you told the author not to look at twice. Those are not symmetric, so:
+Criticality decides how hard you look and how strong the evidence must be. It does
+not, by itself, decide the merge verdict.
 
-- Self-merge is an **earned** verdict: every condition in the self-merge checklist must pass. One unknown means human review.
-- "I found no issues" is not the same as "this is safe to merge alone." A clean read of a P0 diff still routes to a human.
-- Never widen the gate because the diff is small, the author is experienced, the change is urgent, or the PR "looks obvious." Small diffs cause the most confident-wrong merges.
+- Unverified behavior on a silent/expensive path (money, entitlement, authz/tenant
+  scope, data deletion, breaking public contract) routes to a human.
+- A fully read P0/P1 diff with no critical/major findings, stated intent, and
+  observed behavior **self-merges** — including a verified pricing or auth tweak.
+- "I found no issues" is enough for self-merge only when you actually verified the
+  changed behavior (test assertions read, a run, or a screenshot — not "the code
+  looks right").
+- Neighborhood is not blast radius. A type-only change in `billing/` is not P0.
+  User-facing copy is not P0. An email delay is not P0.
 
-But do not gate everything either. A skill that says "needs a human" on a README typo
-is as useless as one that green-lights a pricing change. Most PRs in a healthy repo
-are P2/P3 and should self-merge. Earn trust by being right about which is which.
+A skill that says "needs a human" on an email workflow tweak is as useless as one
+that green-lights an unverified pricing change. Most PRs should self-merge. Earn
+trust by being right about which unknowns are real.
 
 ### 7. Report your own coverage honestly
 
@@ -135,22 +140,27 @@ argument.
 This applies hardest to code an agent wrote. Agents explain their own output fluently
 and are poor at spotting their own blind spots, so "the implementation reasons
 correctly" is the weakest possible basis for clearing a PR. Unobserved behavior on a
-P0/P1 surface is an unknown, and unknowns route to a human.
+silent/expensive path (money, entitlement, authz, data deletion, breaking public
+contract) is an unknown, and that unknown routes to a human. Unobserved P2 copy, UI,
+or workflow timing is a note, not a gate.
 
-### 9. Tighten freely, loosen never
+### 9. Open the hunk, then you may lower the tier
 
-Judgment may always make the gate stricter. It may never make it looser. If a rule says
-human review and your read of the diff says it is fine, the answer is human review with
-your read attached as context. Fail closed: when a required input is missing — the diff,
-the history, CI status, the consumer list — that absence is a reason to escalate, never
-a reason to proceed as though the check passed.
+"Could be P0" before reading is a reason to look, not a reason to gate. After you
+open the hunk, if the changed lines cannot move money, access, data, or external
+contracts, they are not P0 — lower the tier.
 
-### 10. You are not an independent reviewer of your own code
+Fail closed only on **required** inputs: the diff is unreadable, CI status is unknown,
+or there are merge conflicts. Skipping history, not naming a CODEOWNER, or not
+grepping every consumer is a note, not a gate. Judgment may tighten when you find a
+real issue. It may not invent a human-review requirement the hunk does not earn.
+
+### 10. Same-session authorship is a disclosure, not a veto
 
 If you wrote or substantially edited this code earlier in the session, say so in the
-review. A self-review is a useful pass, not an approval. On anything above P2, code
-authored in the same session by the same agent does not qualify for self-merge —
-disclose it and route to a human.
+review. A self-review has the same blind spots twice, so raise the observation bar:
+read the test assertions, run the path, or capture the screenshot. Authorship alone
+does not route to a human.
 
 ---
 
@@ -183,8 +193,8 @@ Create a private map of the PR:
 
 ## Step 2.1 — Criticality classification (mandatory)
 
-Classify **before** reading for bugs. The tier sets how hard you dig, how much
-evidence a finding needs, and whether the PR can self-merge.
+Classify **before** reading for bugs. The tier sets how hard you dig and how much
+evidence a finding needs. It does not by itself decide the merge verdict.
 
 Criticality is two axes multiplied together. Never use one alone.
 
@@ -225,8 +235,8 @@ average. A 900-line P3 docs PR that also flips one pricing constant is a P0 PR.
 
 Then apply these modifiers:
 
-- **+1 tier** if the change is hard to reverse: data migration, backfill, deletion, external state mutation (Stripe objects, provider config, published package version, sent emails), or anything where reverting the commit does not restore the prior state.
-- **+1 tier** if the touched code has a history of failed fixes (Step 2.7).
+- **+1 tier** if revert cannot restore customer-visible state that already happened: data migration, backfill, deletion, Stripe/provider object mutation, published package version, or mail already blasted. A workflow config, template, or delay that has not shipped is still revertible — do not +1 it.
+- **+1 tier** if the touched code has a history of failed fixes you actually found (Step 2.7). Skipping history is not a +1.
 - **−1 tier** if the change is fully behind an off-by-default flag _and_ you verified the flag guards every new path.
 
 Record the tier as: `P1 (surface: shared vehicle-history cache, class: behavior change, modifier: +0)`. Show your reasoning in one line — the author must be able to argue with it.
@@ -239,7 +249,9 @@ Tiering exists to focus effort, not to make everything scary.
 - Do not tier by PR size. 40 files of copy changes is P3.
 - Do not treat "touches a file that imports a payment module" as P0. Trace whether the changed lines actually reach money.
 - Do not raise a tier because a category _could_ apply. Name the specific line that makes it apply.
-- If you genuinely cannot tell what a surface governs, say so, tier it at your best guess, and mark the uncertainty — an unresolved P0/P1 guess routes to a human by definition.
+- User-facing ≠ P0/P1. Loud, revertible UI and copy are P2. Elevate only when the changed lines compute or authorize money/access, or change a public contract.
+- Jobs, queues, and email workflows are not an automatic human gate. They stay P1 for how hard you look; they self-merge when the changed behavior is tested or observed.
+- If you genuinely cannot tell what a surface governs, say so and tier at your best guess. After opening the hunk, if the lines cannot produce the worst outcome, lower the tier. An unverified silent/expensive hunk still routes to a human; an unverified email delay does not.
 
 ---
 
@@ -350,15 +362,17 @@ Look for, in this order, and only if present:
 
 | Signal             | Where                                                                                    | Use it for                                                                                           |
 | ------------------ | ---------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| Ownership          | `CODEOWNERS`, `.github/CODEOWNERS`                                                       | Naming the _specific_ required reviewer, not "someone senior"                                        |
+| Ownership          | `CODEOWNERS`, `.github/CODEOWNERS`                                                       | Who to name if a human review fires; a gate only when branch protection requires that approval          |
 | Team rules         | `CLAUDE.md`, `AGENTS.md`, `.cursor/rules/`, `.greptile/`, `CONTRIBUTING.md`              | Project-specific conventions; treat these as higher authority than generic best practice             |
 | Protected paths    | branch protection notes, `.github/workflows/*`, required checks                          | Which paths already demand approval — never contradict a repo policy that is stricter than your gate |
 | Release surface    | `package.json` exports/`files`, changesets, `openapi.*`, `*.proto`, versioned route dirs | Whether a change is externally published                                                             |
 | Test/CI reality    | CI config, test scripts, coverage config                                                 | Whether "has tests" is even enforced here                                                            |
 | Danger annotations | `// DANGER`, `// do not change`, `@internal`, `@deprecated`, past `TODO(incident)`       | Institutional memory that the diff may be walking past                                               |
 
-If `CODEOWNERS` matches a changed path and the owner is not the author, that is a
-routing fact, not a suggestion: name that owner in the merge decision.
+If `CODEOWNERS` matches a changed path and the owner is not the author, name that
+owner when you route a human review. CODEOWNERS is a gate only if branch protection
+or required reviews actually demand that approval. An informational CODEOWNERS file
+is routing, not a veto.
 
 ---
 
@@ -367,7 +381,8 @@ routing fact, not a suggestion: name that owner in the merge decision.
 **The single highest-value check this skill can run.** A change to code that has already
 been "fixed" two or three times is not a normal change. Either the earlier fixes patched
 symptoms and this one will too, or the code path has a property nobody has understood
-yet. Both mean a human should look.
+yet. Both mean look harder. Human review only when you actually find a revert, hotfix,
+or repeat-fix chain.
 
 Run this whenever the PR is P0/P1, fixes a bug, or touches a file you can see has churn.
 Skip only when there is no repository to inspect.
@@ -415,14 +430,14 @@ gh issue list --state all --search '<symptom>' --limit 20
 
 ### How findings feed the review
 
-- **Previous fix reverted or hotfixed within days** → +1 criticality tier and an automatic human-review gate. Say which commit and what happened.
+- **Previous fix reverted or hotfixed within days** → +1 criticality tier and a human-review gate. Say which commit and what happened. This fires only when you found the chain.
 - **Third or later attempt at the same behavior** → treat "does this fix the root cause?" as a blocking question, not a nit. Quote the earlier attempt and name what it missed.
 - **Reviewer concern from a past PR that this PR reintroduces** → high-confidence finding; cite the old PR.
 - **Churn hotspot (>8 changes / 90 days, or 4+ distinct authors)** → raise scrutiny and note it, but this alone is not a gate.
 - **Clean history** → say so in one line. It is real evidence _for_ self-merge and should be reported as such.
+- **History not checked** → write "History: not checked (no repository access)." That is a note, not a gate.
 
-Never fabricate history. If you did not run these commands, do not imply you did — write
-"History: not checked (no repository access)" and let the gate handle it.
+Never fabricate history. If you did not run these commands, do not imply you did.
 
 Deeper playbook, including revert-chain reconstruction and how to read a bug's fix
 lineage: `references/history-forensics.md`.
@@ -586,8 +601,10 @@ imagined ones. Format:
 | ----------------------------------- | -------------------------------------------- | --------------------------------- | -------------------------------- | --------------------------------------- |
 | Overage invoices double-count usage | Any account crossing plan quota after deploy | Paying customers on metered plans | None — no alert on invoice delta | Code revert + reissue affected invoices |
 
-If a row has "Detection: none" and "Rollback: manual data repair" on a P0 surface, that
-is a human-review gate on its own, even with zero findings in the diff.
+If a row has "Detection: none" and "Rollback: manual data repair" on a silent/expensive
+path, demand observation (a test asserting the value, a run, a screenshot of the flow).
+That is a verification requirement. It is not an automatic human stamp if you already
+observed the behavior.
 
 Also state what this PR **cannot** break, when it is genuinely bounded — "changes are
 confined to the admin export screen; no shared modules, contracts, or persisted data are
@@ -596,7 +613,9 @@ touched." That sentence is what earns a self-merge.
 ### Pass I — Observation: can this be watched working?
 
 For every behavior change, decide whether it was **observed** or merely **reasoned
-about**, and label it. Reasoned-about behavior on a P0/P1 surface is an unknown.
+about**, and label it. Reasoned-about behavior on a silent/expensive path (money,
+entitlement, authz, data deletion, breaking public contract) is an unknown and routes
+to a human. Reasoned-about P2 copy, UI, or workflow timing is a note, not a gate.
 
 Ranked evidence, strongest first:
 
@@ -617,7 +636,7 @@ Expect a number between 0 and 1; before this change the field was absent.
 Rules:
 
 - A test that asserts the function was called is not observation. A test that asserts the _value_ is.
-- UI changes are not observed by tests alone — deterministic tests miss visual and interaction behavior. Ask for a screenshot or a recording, or say the visual behavior is unverified.
+- UI screenshots are preferred evidence, not a gate. For checkout, login, or auth flows, unverified visual behavior is an unknown on a silent/expensive path. For other UI, full coverage plus tests can still self-merge; say the visual behavior is unverified.
 - Migrations are observed against a copy of real data shapes, not an empty dev database.
 - If nothing in the PR can be observed without a full manual environment, that is itself worth saying — it usually means the change should be split.
 
@@ -734,7 +753,7 @@ Severity says how bad. Triage says what happens next. Tag each finding:
 | -------------- | -------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
 | **Actionable** | You can name the defect and the fix                                                                                        | Goes in Issues, ordered by severity                                          |
 | **Nit**        | Real but optional; no risk you can name                                                                                    | Goes under Nits, max 5, never affects score or gate                          |
-| **Ambiguous**  | Might be a defect; depends on context you do not have (product intent, an unwritten constraint, a decision made elsewhere) | Goes under Questions, and on a P0/P1 surface it triggers a human-review gate |
+| **Ambiguous**  | Might be a defect; depends on context you do not have (product intent, an unwritten constraint, a decision made elsewhere) | Goes under Questions. Triggers human review only when answering it would change safety — amounts, entitlements, or access whose intent the PR never states |
 
 The ambiguous bucket is what keeps the other two honest. Without it, uncertain findings
 get rounded either into false positives or into silence. Name the specific missing
@@ -800,9 +819,10 @@ Round down after deductions unless a hard cap applies. Minimum score is 1.
 | 2/5   | Needs work | ❌ Request changes                  |
 | 1/5   | Not ready  | ❌ Request changes                  |
 
-**The score is about code quality. It is not the merge decision.** A 5/5 pricing change
-still needs a human. A 3/5 typo fix does not. Compute the score, then run the gate below
-independently.
+**The score is about code quality. It is not the merge decision.** A 5/5 pricing
+change self-merges when the PR states the new amount and a test or run asserts it. A
+5/5 pricing change with unexplained intent still needs a human. Compute the score,
+then run the gate below independently.
 
 ---
 
@@ -821,25 +841,26 @@ wins. Do not skip to a conclusion and reverse-engineer the reasoning.
 
 These hold no matter what the diff looks like or what the author says:
 
-- **Fail closed.** A missing input — unavailable diff, unreadable history, unknown CI status, unknown consumers — escalates. It never passes by default.
-- **Tighten, never loosen.** Your judgment can move a verdict toward more scrutiny. It can never move one toward less. If a deterministic condition says human review, no amount of "but the code is clearly fine" overrides it.
-- **Deterministic checks run before judgment.** Tier, size, path deny-list, PR state, and history are mechanical. Only after they pass does your reading of the code matter, and then only to escalate.
+- **Asymmetric on unknowns, not surfaces.** Unverified money, entitlement, authz, data deletion, or a breaking public contract routes to a human. A verified P0 change with no findings does not.
+- **Fail closed on required inputs only.** Unreadable diff, unknown CI, or merge conflicts escalate. Skipped history, unnamed CODEOWNER, or an incomplete consumer grep do not.
+- **Open the hunk, then you may lower the tier.** Path, folder, and "this file is near billing" are reasons to look. They are not a deny-list.
 - **Never recommend merging on someone's behalf.** The verdict is a recommendation to the author; approving, requesting changes, and merging are human actions.
 
-### Gate 0 — Mechanical pre-checks (any failure → not eligible for self-merge)
+### Gate 0 — Mechanical pre-checks (review reliability)
 
-Cheap, deterministic, and run first:
+Cheap, deterministic, and run first. Failures here mean you cannot issue a confident
+self-merge on skimmed code — recommend a split, or condition the verdict on CI —
+not "human review because the path looks scary":
 
 - [ ] PR has no merge conflicts and is up to date enough with the base branch to be meaningful.
 - [ ] No existing "changes requested" review sitting unresolved.
 - [ ] CI is green, or the verdict is explicitly conditional on it.
 - [ ] Diff is within observable bounds: roughly **≤500 changed lines and ≤20 files**, or larger only when the change is mechanically repetitive and you verified the pattern.
-- [ ] No changed path matches the P0 deny-list (money, auth, secrets, migrations, public contract, deploy config).
 - [ ] The diff was fully available to read.
 
-Size is not a proxy for risk — a one-line pricing change is P0 — but it _is_ a proxy for
-review reliability. Above these bounds, recommend a split rather than issuing a
-confident verdict on code you skimmed.
+Size is a proxy for review reliability, not risk. A one-line pricing change is P0
+scrutiny with a high observation bar; it is not a path deny. Above these bounds,
+recommend a split rather than issuing a confident verdict on code you skimmed.
 
 ### Gate 1 — Blockers (any one → BLOCKED)
 
@@ -853,42 +874,36 @@ confident verdict on code you skimmed.
 
 ### Gate 2 — Human review required (any one → HUMAN REVIEW REQUIRED)
 
-Effective tier and evidence, not intuition:
+Verification and unresolved risk, not surface labels. P0/P1 does **not** fire this
+gate by itself:
 
-1. **Effective tier is P0.** No exceptions. Pricing, billing, quotas, auth, tenant isolation, secrets, data deletion, published SDK/API contract, and deploy config always get a second pair of eyes, even at 5/5 with no findings.
-2. **Effective tier is P1 and any of:** a behavior or contract change, no test covering the changed behavior, a new external dependency, or review coverage below full.
-3. **Prior-attempt history is bad** — the touched path has a revert, hotfix, or repeat-fix chain (Step 2.7).
-4. **Break analysis produced a row with no detection and non-trivial rollback** on a P0/P1 surface.
-5. **Irreversible change** — migration, backfill, deletion, published artifact, or external provider state that a `git revert` will not undo.
-6. **Contract change with unknown or external consumers** — public API, SDK export, webhook payload, event schema, shared type consumed outside the repo.
-7. **CODEOWNERS names an owner who is not the author** for a changed path.
-8. **Your own confidence is medium or lower** on a P0/P1 area, or you had to assume something material you could not verify.
-9. **Any unresolved major finding**, even if the author says they'll fix it after merge.
-10. **Behavior changed with zero test delta** on anything above P2.
-11. **Review coverage is partial** on a P0/P1 PR.
-12. **Nothing about the change was observed** — behavior on a P0/P1 surface rests on reasoning alone, with no test, run, or output anyone has looked at.
-13. **You authored this code earlier in the session** and the effective tier is above P2.
-14. **A finding is ambiguous on a P0/P1 surface** — you cannot tell whether it is a real defect without context only a human has.
+1. **Unverified behavior on a silent/expensive path** — money movement, entitlement, authz/tenant scope, data deletion, or a breaking public contract — and nothing observed it (no test asserting the value/check, no run, no screenshot of that flow).
+2. **Unresolved major**, or an **ambiguous product question that would change safety** (e.g. "is 3 cents the intended overage?" when the PR never says so). Ordinary nits and "please double-check" do not count.
+3. **Partial coverage** — the diff was not fully read, or the PR is too mixed to review; prefer split over a fake human gate.
+4. **Known-bad history on the touched lines** — revert/hotfix/repeat-fix chain you actually found (Step 2.7). Skipping history is a note, not a gate.
+5. **Repo policy requires a human** — branch protection or required CODEOWNERS approvals. Name that policy. An informational CODEOWNERS file is not this.
+6. **Breaking external contract with unknown consumers** — rename, remove, default, or type change on a published API/SDK. Additive optional fields you confirmed are optional are not this.
+7. **Irreversible side effect that was not verified** — blast email, Stripe object mutate, published package, destructive migrate. Unsendability is a verification demand (content, recipients, trigger), not an automatic human stamp.
+
+If none fire and Gate 1 is clean → continue to Gate 3, including P0 and including
+code you authored in this session (disclose authorship; do not auto-escalate).
 
 ### Gate 3 — Self-merge (requires ALL to be true)
 
-Every single one. One "unknown" disqualifies:
+P2/P3 is not a prerequisite. Self-merge is the default when the review is complete:
 
-- [ ] Gate 0 mechanical pre-checks all pass.
-- [ ] Effective tier is **P2 or P3**.
+- [ ] Gate 0 mechanical pre-checks all pass (or the PR is oversized only because it is mechanically repetitive and you verified the pattern).
+- [ ] No Gate 2 trigger fired.
 - [ ] No critical and no major findings. Minors and nits only.
 - [ ] Review coverage is **full** — you read every changed hunk, not a sample.
-- [ ] Every behavior change is covered by a test **whose assertions you read**, or was directly observed, or the change is provably non-behavioral (docs, copy, comments, formatting, test-only, generated output from an unchanged verified generator).
-- [ ] **Reversible**: a plain code revert fully restores prior behavior. No migration, backfill, deleted data, published package, or external state.
-- [ ] **No public contract change** — no changed export, endpoint shape, status code, event payload, or env var that anything outside this PR depends on.
-- [ ] **Clean prior history** on the touched paths — no revert/hotfix/repeat-fix chain.
-- [ ] No new production dependency.
-- [ ] No CODEOWNERS owner other than the author on any changed path.
+- [ ] Silent/expensive changed behavior was observed (test assertions read, a run, or a screenshot of the flow). Other behavior was observed, statically verified, or non-behavioral (docs, copy, comments, formatting, test-only, generated output from an unchanged verified generator).
 - [ ] Blast radius is bounded and you can state the boundary in one sentence.
-- [ ] No ambiguous findings left unresolved.
+- [ ] No unresolved safety-ambiguous questions (amounts, entitlements, or access whose intent the PR never states).
 
-If all pass, say so plainly and briefly. Do not manufacture a reason to hedge — an
-over-cautious gate trains the author to ignore the gate.
+If all pass, say so plainly and briefly — including for a verified pricing or auth
+tweak, an email workflow delay, and agent-authored P2/P0 code you observed. Do not
+manufacture a reason to hedge — an over-cautious gate trains the author to ignore
+the gate.
 
 ### Writing the decision
 
@@ -896,21 +911,21 @@ Always include, in this order:
 
 1. The verdict.
 2. The effective tier and the one-line reason for it.
-3. **Why** — the specific gate that fired, quoted concretely ("Gate 2.1: `packages/billing/src/plan-limits.ts` changes the overage multiplier").
-4. **Who should review** — a named CODEOWNER if one exists; otherwise the engineer `git blame` and recent history show has actually worked in this code, named specifically; otherwise the role ("whoever owns billing", "someone with production DB access"). Never just "a senior engineer".
-5. **What that reviewer should focus on** — 1–3 specific things, not "review the PR".
+3. **Why** — the specific gate that fired, quoted concretely ("Gate 2.1: `packages/billing/src/plan-limits.ts` changes the overage multiplier and no test asserts the new cents"), or "No gate fired" on self-merge.
+4. **Who should review** — a named CODEOWNER if one exists; otherwise the engineer `git blame` and recent history show has actually worked in this code, named specifically; otherwise the role ("whoever owns billing", "someone with production DB access"). Never just "a senior engineer". Omit if self-merge.
+5. **What that reviewer should focus on** — 1–3 specific things, not "review the PR". Omit if self-merge.
 6. **How to observe it working** — the command to run and the output to expect, when the change is observable.
 7. **How long it should take** — a rough estimate signals you understand the change ("~10 minutes, two files matter").
-8. **What would downgrade the gate** — the concrete change that would make this self-mergeable next time ("add a test asserting the overage multiplier at the plan boundary, and this becomes self-merge at P1").
+8. **What would clear the gate** — the concrete verification or stated intent that would make this self-mergeable ("add a test asserting the overage multiplier at the plan boundary"). Never "this surface always routes to a human."
 
 Point 8 matters: the gate should teach, not just block.
 
 ### Honesty constraints on the gate
 
 - This verdict is **advisory**. It never overrides branch protection, required approvals, or org policy. If repo config is stricter, defer to it and say so.
-- Never recommend self-merge to satisfy urgency. If the author says it's urgent and it's P0, the answer is "get a fast reviewer", not "ship it".
+- Never recommend self-merge to skip observation or to skip a real blocker. Urgency changes how fast a reviewer looks, not whether an unverified silent/expensive change needs one. A verified P0 can self-merge.
 - Never soften a blocker because the author pushes back. Re-examine the evidence; if the evidence holds, the verdict holds.
-- If you skipped history or repo signals, state it in the decision — do not let a silent skip look like a clean result.
+- If you skipped history or repo signals, state it in the decision — do not let a silent skip look like a clean result, and do not treat the skip as a Gate 2 trigger.
 
 Worked examples of gate calls, including tricky near-misses:
 `references/merge-gate.md`.
@@ -951,7 +966,7 @@ Always write the review in this structure.
 - **Focus on:** [1–3 concrete things — omit if self-merge]
 - **Observe it:** [command to run + expected output — omit if not observable]
 - **Effort:** [~N minutes, which files matter]
-- **To self-merge next time:** [the concrete change that would clear the gate]
+- **To self-merge next time:** [the concrete verification or stated intent that would clear the gate — never "this surface always routes to a human"]
 
 [If oversized: add a 🔀 **Consider splitting** line naming the seams.]
 
@@ -1114,14 +1129,14 @@ Before finalizing, ask yourself:
 ### Gate self-check
 
 7. Did I assign the tier from what the changed lines actually govern, opening the hunks rather than reading folder names?
-8. Did I take the **highest** hunk's tier, not an average, and apply the reversibility and bad-history modifiers?
-9. Did I check prior attempts, or explicitly say I could not?
+8. Did I take the **highest** hunk's tier, not an average, and apply +1 irreversible only when revert cannot restore already-happened customer state?
+9. Did I check prior attempts, or explicitly say I could not — without treating a skip as a gate?
 10. Is every break-analysis row grounded in traced code rather than imagined?
 11. Did I run the gates in order, and can I quote the exact gate that fired?
-12. If I said SELF-MERGE OK: does **every** Gate 3 condition genuinely pass, and would I still say it if this shipped to production tonight with no one watching?
-13. If I said HUMAN REVIEW REQUIRED: did I name a specific reviewer or role, specific focus areas, and the concrete thing that would clear the gate next time?
-14. Am I gating out of real evidence, or out of vagueness? Vagueness is my problem to resolve, not the author's to absorb.
-15. Is the merge decision consistent with the findings, the tier, and the stated coverage?
+12. If I said SELF-MERGE OK: does every Gate 3 condition pass, and was silent/expensive behavior actually observed — including a verified P0?
+13. If I said HUMAN REVIEW REQUIRED: did I name a specific reviewer or role, specific focus areas, and the concrete verification that would clear the gate — not "this surface always needs a human"?
+14. Am I gating on unverified risk or a real finding, or on folder name / "it's user-facing" / "it's an email"? Vagueness is my problem to resolve, not the author's to absorb.
+15. Is the merge decision consistent with the findings and the stated coverage — not merely with the tier?
 
 If not, revise before sending.
 

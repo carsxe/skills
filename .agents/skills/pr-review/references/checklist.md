@@ -4,10 +4,10 @@ Use this checklist privately. Do not output every item.
 
 ## Before anything else
 
-- [ ] Did I assign an effective criticality tier (P0–P3) from the actual changed lines?
+- [ ] Did I assign an effective criticality tier (P0–P3) from the actual changed lines — not the folder name?
 - [ ] Did I take the highest hunk's tier rather than an average?
-- [ ] Did I apply the reversibility and prior-failed-fix modifiers?
-- [ ] Did I check CODEOWNERS and any repo rules files?
+- [ ] Did I apply the reversibility modifier only when revert cannot restore already-happened customer state?
+- [ ] Did I check CODEOWNERS as routing (and as a gate only if repo policy requires that approval)?
 
 ## Evidence gate for each issue
 
@@ -80,24 +80,24 @@ Use this checklist privately. Do not output every item.
 
 - [ ] Did I label each behavior change observed vs. reasoned about?
 - [ ] Did I read the assertions of any test I'm counting as coverage, not just its name?
-- [ ] For UI changes, is there a screenshot or observed run, not just passing tests?
+- [ ] For checkout/login/auth UI, was the flow observed? For other UI, screenshot is preferred, not a gate.
 - [ ] Did I give a runnable observation command with expected output where possible?
 - [ ] Is the PR small enough to observe end to end — or did I recommend splitting?
 
 ## Merge gate
 
-- [ ] Did I run Gate 0 mechanical pre-checks before forming a judgment?
-- [ ] Did I fail closed on every missing input rather than assuming it passed?
-- [ ] Did my judgment only tighten the verdict, never loosen it?
-- [ ] Did I disclose it if I wrote this code earlier in the session?
+- [ ] Did I run Gate 0 mechanical pre-checks (conflicts, CI, size, diff available) — not a path deny-list?
+- [ ] Did I fail closed only on required inputs (unreadable diff, unknown CI, conflicts)?
+- [ ] After opening the hunk, did I lower the tier if the lines cannot move money/access/data/contracts?
+- [ ] Did I disclose it if I wrote this code earlier in the session — without treating authorship as a veto?
 - [ ] Did I run the gates in order and can I quote the one that fired?
-- [ ] SELF-MERGE: does every Gate 3 condition pass, with no unknowns?
-- [ ] SELF-MERGE: would I still say this if it shipped tonight unwatched?
+- [ ] SELF-MERGE: full coverage, no critical/major, silent/expensive behavior observed or other behavior verified, blast radius stated, no safety-ambiguous questions — including verified P0?
+- [ ] HUMAN REVIEW: did a real Gate 2 trigger fire (unverified silent path, unresolved major/intent, partial coverage, found bad history, repo policy, breaking contract, unverified irreversible side effect) — not folder name / user-facing / email?
 - [ ] HUMAN REVIEW: did I name a specific reviewer or role?
 - [ ] HUMAN REVIEW: did I give 1–3 focus items and an effort estimate?
-- [ ] HUMAN REVIEW: did I say what would clear the gate next time?
-- [ ] Am I gating on evidence, or on my own vagueness?
-- [ ] Is the verdict consistent with the tier, findings, and stated coverage?
+- [ ] HUMAN REVIEW: did I say the concrete verification that would clear the gate — never "this surface always routes to a human"?
+- [ ] Am I gating on unverified risk or a real finding, or on vagueness?
+- [ ] Is the verdict consistent with the findings and coverage — not merely with the tier?
 - [ ] Did I keep nits to 5 or fewer, and out of the gate entirely?
 
 ## Severity quick reference
@@ -114,6 +114,6 @@ Use this checklist privately. Do not output every item.
 | Verdict               | Use when                                                                                                                                      | Must include                                                  |
 | --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
 | 🛑 BLOCKED            | Critical finding, missing authz, leaked secret, wrong money, unreadable diff                                                                  | The defect + the fix                                          |
-| 👥 HUMAN REVIEW       | P0 anything; P1 with behavior change / no test / new dep / partial coverage; bad history; irreversible; unknown consumers; CODEOWNER ≠ author | Reviewer, focus items, effort, what clears it next time       |
+| 👥 HUMAN REVIEW       | Unverified silent/expensive path; unresolved major or safety-ambiguous intent; partial coverage; found revert/hotfix chain; repo-required approval; breaking external contract; unverified irreversible side effect | Reviewer, focus items, effort, the verification that clears it |
 | 🔀 CONSIDER SPLITTING | Too large or mixed to review reliably (>~500 lines / 20 files / multiple concerns)                                                            | The seams, the suggested stack, and that it isn't a rejection |
-| ✅ SELF-MERGE OK      | Gate 0 clean, P2/P3, no major findings, full coverage, observed or non-behavioral, reversible, no contract change, clean history              | The blast-radius boundary in one sentence                     |
+| ✅ SELF-MERGE OK      | Gate 0 clean, no Gate 2 trigger, no major findings, full coverage, silent/expensive behavior observed (or other behavior verified / non-behavioral), blast radius stated | The blast-radius boundary in one sentence; if P0, what was observed |

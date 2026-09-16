@@ -21,32 +21,35 @@ crisply.
 ## The posture
 
 Assume the industry default: an AI reviewer comments, a human merges. This skill goes
-further and will clear a PR for self-merge — which only works if that clearance is
-trustworthy. Trust is built by being _right about the boring ones_ and _unmovable on the
-critical ones_.
+further and will clear a PR for self-merge — including a verified pricing or auth
+tweak — which only works if that clearance is trustworthy. Trust is built by being
+_right about the boring ones_ and _unmovable on unverified silent/expensive risk_.
 
 Two failure modes, both fatal:
 
-- **Gate everything** → the author stops reading the verdict, and the one time it says P0 they scroll past it.
+- **Gate everything** → the author stops reading the verdict, and the one time it says "unverified overage multiplier" they scroll past it.
 - **Clear everything** → the first incident kills the skill's credibility permanently.
 
-Aim to clear the majority of ordinary feature PRs and hold the line absolutely on money,
-access, data, and public contracts.
+**Criticality decides how hard you look. It does not, by itself, decide the merge
+verdict.** Aim to clear ordinary feature PRs, email workflow tweaks, type-only
+changes in billing, and verified P0 hunks whose intent is stated and observed. Hold
+the line on unverified money, access, data deletion, and breaking public contracts.
 
 For calibration: PostHog runs an auto-approval agent on their main repo and reports it
 giving the final approval on roughly one in three merged PRs, with deterministic
-deny-lists and size ceilings deciding eligibility before any model judgment runs. That
-ratio is a sane target — a gate clearing 5% is theatre, and one clearing 80% is not
-reading the diff.
+size ceilings and review-reliability checks deciding eligibility before any model
+judgment runs. A gate clearing 5% is theatre. A gate that auto-blocks every P0 path
+is also theatre.
 
 ### Invariants worth copying from production auto-approvers
 
-- **Fail closed.** Every missing input escalates. No input is optional-by-default.
-- **Deterministic first, model second.** Path deny-list, tier, size, PR state, and history are mechanical checks. Model judgment runs afterward and only to catch showstoppers the mechanics missed.
-- **The model may tighten the gate, never loosen it.** No reading of the code overrides a deterministic condition.
+- **Asymmetric on unknowns, not surfaces.** Unverified money/authz/deletion/breaking contract escalates. A verified P0 with no findings does not.
+- **Fail closed on required inputs only.** Unreadable diff, unknown CI, merge conflicts. Skipped history and unnamed CODEOWNER are notes, not gates.
+- **Deterministic first, model second.** Size, PR state, diff availability, and *repo-required* approvals are mechanical. Path is a reason to look, not a deny-list. History is a gate only when you found a revert/hotfix chain.
+- **Open the hunk, then you may lower the tier.** No reading of the code overrides a real Gate 2 trigger. A "could be P0" guess does not survive opening a type-only hunk.
 - **Approve or escalate — never request changes or merge on the author's behalf.** Blocking a PR mechanically and merging one are both human actions.
-- **When escalating, say why in one or two sentences with a risk level and a next step.** An escalation without routing is just a delay.
-- **Re-derive the deny-list from the repo's own history** rather than inheriting a generic one. See `criticality.md`.
+- **When escalating, say why in one or two sentences with a risk level and a next step.** An escalation without routing is just a delay. Never close with "this surface always routes to a human."
+- **Re-derive the scrutiny list from the repo's own history** rather than inheriting a generic deny-list. See `criticality.md`.
 
 ---
 
@@ -54,29 +57,32 @@ reading the diff.
 
 ```
 0. Mechanical pre-checks fail (conflicts, changes
-   requested, oversized diff, deny-listed path,
-   diff unavailable)?                            → not self-merge eligible
+   requested, oversized skimmed diff,
+   diff unavailable)?                            → split or condition on CI;
+                                                   not "human because path"
 1. Any Gate 1 blocker?                          → 🛑 BLOCKED
-2. Effective tier P0?                           → 👥 HUMAN REVIEW
-3. Tier P1 + (behavior change | no test |
-   new dependency | partial coverage)?          → 👥 HUMAN REVIEW
-4. Bad prior history on touched paths?          → 👥 HUMAN REVIEW
-5. Irreversible, or break row with no
-   detection on P0/P1?                          → 👥 HUMAN REVIEW
-6. Contract change with unknown consumers?      → 👥 HUMAN REVIEW
-7. CODEOWNER ≠ author on a changed path?        → 👥 HUMAN REVIEW
-8. My own confidence medium- on P0/P1, or
-   coverage partial on P0/P1?                   → 👥 HUMAN REVIEW
-9. Any unresolved major finding?                → 👥 HUMAN REVIEW
-10. Behavior unobserved on P0/P1, ambiguous
-    finding on P0/P1, or I authored it (>P2)?    → 👥 HUMAN REVIEW
-11. Too large/mixed to review reliably?         → 🔀 RECOMMEND SPLIT
-12. All Gate 3 conditions pass?                 → ✅ SELF-MERGE OK
-13. Otherwise                                   → 👥 HUMAN REVIEW
+2. Unverified silent/expensive path
+   (money, entitlement, authz, deletion,
+   breaking public contract)?                    → 👥 HUMAN REVIEW
+3. Unresolved major, or ambiguous product
+   question that would change safety?            → 👥 HUMAN REVIEW
+4. Partial coverage / too mixed to review?      → 🔀 RECOMMEND SPLIT
+5. Known-bad history you actually found?        → 👥 HUMAN REVIEW
+6. Repo policy requires a human
+   (branch protection / required CODEOWNERS)?    → 👥 HUMAN REVIEW
+7. Breaking external contract
+   (rename/remove/default/type) with
+   unknown consumers?                            → 👥 HUMAN REVIEW
+8. Irreversible side effect not verified
+   (blast email, Stripe mutate, publish,
+   destructive migrate)?                         → 👥 HUMAN REVIEW
+9. All Gate 3 conditions pass?                  → ✅ SELF-MERGE OK
+10. Otherwise                                   → 👥 HUMAN REVIEW
 ```
 
-Step 13 is the default. Self-merge is the exception that has to be earned, but steps
-0–11 are narrow enough that ordinary feature work reaches step 12.
+Step 10 is the fallback, not the default. P0/P1 does not appear in this flow as a
+standalone trigger. Ordinary feature work, email delays, type-only billing hunks,
+and verified pricing tweaks reach step 9.
 
 ---
 
@@ -86,7 +92,7 @@ Step 13 is the default. Self-merge is the exception that has to be earned, but s
 
 Adds an empty-state component to the saved-searches list, plus a test. Two files, no
 shared modules, no data writes, no contract change, clean history, CODEOWNERS does not
-cover the path.
+require approval.
 
 > **✅ SELF-MERGE OK**
 >
@@ -97,21 +103,61 @@ cover the path.
 
 Do not pad this. Short is the point.
 
-### 👥 Human review: one-line pricing constant
+### ✅ Self-merge: email workflow delay
 
-Changes `OVERAGE_RATE_CENTS` from 4 to 3. Diff is one line. Tests pass. No findings.
+Changes a welcome-email delay from 1h to 2h. Test updated. Recipients, template, and
+amounts untouched.
+
+> **✅ SELF-MERGE OK**
+>
+> - **Criticality:** P2 — notification workflow timing, behavior change
+> - **Why:** No gate fired. Unsendability does not apply to an unshipped delay. Test asserts the new interval.
+> - **Effort:** n/a
+
+### ✅ Self-merge: type-only change in billing
+
+Adds a JSDoc comment and a TypeScript type in `packages/billing`. No runtime amount,
+quota, or Stripe call changes.
+
+> **✅ SELF-MERGE OK**
+>
+> - **Criticality:** P3 — billing neighborhood, non-behavioral
+> - **Why:** No gate fired. The hunk does not compute or display money.
+
+### ✅ Self-merge: dashboard copy next to a usage number
+
+Rewords the label beside a usage meter. The number is still read from the existing
+API field; computation is untouched.
+
+> **✅ SELF-MERGE OK**
+>
+> - **Criticality:** P3 — presentation copy
+> - **Why:** No gate fired. Displaying a price nearby does not inherit P0.
+
+### ✅ Self-merge: stated pricing change, observed
+
+Changes `OVERAGE_RATE_CENTS` from 4 to 3. PR description says "new published overage
+price." A test asserts the plan boundary is 3 cents.
+
+> **✅ SELF-MERGE OK**
+>
+> - **Criticality:** P0 — pricing constant (`packages/billing/src/plan-limits.ts`), contract change
+> - **Why:** No gate fired. Intent is stated; test asserts the new cents. Surface is P0, so scrutiny was high — that is not a human stamp.
+> - **Observe it:** `pnpm test plan-limits` — expect overage at the quota boundary to equal 3.
+
+### 👥 Human review: pricing change with no stated intent
+
+Same one-line `OVERAGE_RATE_CENTS` 4 → 3. PR title is "tweak constants." No description,
+no test asserting 3, no mention of a published price change.
 
 > **👥 HUMAN REVIEW REQUIRED**
 >
 > - **Criticality:** P0 — pricing constant (`packages/billing/src/plan-limits.ts`), contract change
-> - **Why:** Gate 2.1. Every metered account's next invoice changes. I found no defect in the code — the gate is about consequence, not correctness.
+> - **Why:** Gate 2.2. Every metered account's next invoice changes, and the PR never says 3 is the intended rate. I found no defect in the arithmetic — the gate is unverified product intent, not "pricing always needs a human."
 > - **Reviewer:** @billing-owners (CODEOWNERS)
-> - **Focus on:** whether in-flight billing periods should use the old rate, and whether pricing pages, plan docs, and any cached plan snapshots need the same update.
-> - **Effort:** ~5 minutes, one file, but confirm the rollout intent.
-> - **To self-merge next time:** pricing constants will always route to a human. Not a gap to close.
-
-Note the explicit "I found no defect" — it stops the author reading the gate as an
-accusation.
+> - **Focus on:** whether 3 cents is the published rate, and whether in-flight billing periods should use the old rate.
+> - **Effort:** ~5 minutes, one file.
+> - **To self-merge next time:** state the new published price in the PR body and add a test asserting 3 at the plan boundary.
 
 ### 🛑 Blocked: missing tenant scope
 
@@ -122,7 +168,7 @@ New endpoint reads records by ID with no organization scoping.
 > - **Criticality:** P0 — tenant isolation on a data-read route
 > - **Why:** Gate 1. `getVehicleReport(id)` queries by primary key with no `organizationId` predicate; any authenticated caller can read another org's report by guessing or enumerating IDs.
 > - **Fix:** scope the query the way `getPlateLookup()` does in the same module.
-> - **After the fix:** still human review (P0 surface).
+> - **After the fix:** self-merge if a test asserts the org predicate; otherwise human review (unverified authz).
 
 ### 👥 Human review: clean code, bad history
 
@@ -132,24 +178,48 @@ charges.
 
 > **👥 HUMAN REVIEW REQUIRED**
 >
-> - **Criticality:** P1 → **P2 escalated to P1+** — provider retry path, behavior change, +1 for prior failed fix
-> - **Why:** Gate 2.3. `9d2ab41` reverted "add retry to provider client" after it double-charged upstream lookups; the re-land in `f10c7e2` added an idempotency key. This PR moves retry into a wrapper that runs before that key is attached.
+> - **Criticality:** P1 — provider retry path, behavior change, +1 for prior failed fix
+> - **Why:** Gate 2.4. `9d2ab41` reverted "add retry to provider client" after it double-charged upstream lookups; the re-land in `f10c7e2` added an idempotency key. This PR moves retry into a wrapper that runs before that key is attached.
 > - **Reviewer:** whoever owns the provider integration; the author of `f10c7e2` has the context.
 > - **Focus on:** whether the idempotency key still applies on the new retry path.
 > - **Effort:** ~15 minutes; one file plus the earlier revert.
+> - **To self-merge next time:** show the idempotency key is attached before the new retry wrapper (test asserting no duplicate upstream charge on retry).
 
-This is the case the whole history step exists for. The diff looks fine. History says
-otherwise.
+This is the case the whole history step exists for. The diff looks fine. History you
+*found* says otherwise. History you *skipped* does not.
 
-### 👥 Human review: additive but externally visible
+### ✅ Self-merge: additive optional API field, confirmed optional
 
-Adds an optional `confidence_score` field to a public API response.
+Adds an optional `confidence_score` field to a public API response. Field is omitted
+when absent; docs and SDK types ship together; existing clients ignore unknown fields
+or the OpenAPI spec marks it optional.
+
+> **✅ SELF-MERGE OK**
+>
+> - **Criticality:** P0 — public API response shape, additive
+> - **Why:** No gate fired. Confirmed optional; not a rename/remove/default/type break. Gate 2.6 is for breaking contracts, not additive optional fields.
+
+### 👥 Human review: receipt email amount change, intent unverified
+
+Template now interpolates a different billed total. No PR description of the new
+amount; no preview/test asserting the cents.
 
 > **👥 HUMAN REVIEW REQUIRED**
 >
-> - **Criticality:** P0 — public API response shape, additive
-> - **Why:** Gate 2.6. Additive normally drops a tier, but this response is consumed by external integrators whose parsers I cannot inspect. Strict clients reject unknown fields.
-> - **Focus on:** whether this needs to sit behind a version or an opt-in parameter, and whether the docs and SDK types ship together.
+> - **Criticality:** P0 — billed amount in a receipt email
+> - **Why:** Gate 2.1 / 2.7. Money in an irreversible channel, and content was not observed. Unsendability is a verification demand, not the reason by itself.
+> - **Focus on:** the source of the new total and a preview asserting the cents.
+> - **To self-merge next time:** state the intended amount and add a template test/preview that asserts it.
+
+### ✅ Self-merge: receipt email amount change, stated and observed
+
+Same template change. PR says the total now excludes tax because tax is itemized
+below. A fixture preview asserts the cents.
+
+> **✅ SELF-MERGE OK**
+>
+> - **Criticality:** P0 — billed amount in a receipt email
+> - **Why:** No gate fired. Intent stated; preview asserts the cents.
 
 ---
 
@@ -159,20 +229,21 @@ Cases where the tempting answer is wrong.
 
 | Situation                                                    | Tempting                          | Correct                                                             | Why                                                                                                       |
 | ------------------------------------------------------------ | --------------------------------- | ------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
-| One-character fix on a P0 path                               | Self-merge, it's trivial          | Human review                                                        | Size is not blast radius. The smallest P0 diffs cause the biggest incidents.                              |
-| Author says "this is urgent, just tell me it's fine"         | Clear it                          | Human review, and say a fast reviewer is the answer                 | Urgency changes who reviews and how fast, never whether.                                                  |
+| One-character proven bugfix on a P0 path, test asserts the value | Human review, it's P0          | Self-merge                                                          | Surface is scrutiny. Observed bugfix is not an unexplained rate/permission change.                        |
+| Unexplained rate or permission change, no stated intent      | Self-merge, it's one line         | Human review                                                        | Gate 2.2: product intent would change safety and the PR never states it.                                  |
+| Author says "this is urgent, just tell me it's fine"         | Clear an unverified P0            | Verify or get a human; urgency does not skip observation            | A verified P0 can self-merge. An unverified one cannot, however urgent.                                   |
 | Big refactor, zero behavior change claimed                   | Human review, it's huge           | Self-merge _if_ verified non-behavioral, full coverage, tests green | Size alone is not a gate. But "no behavior change" is a claim you must verify, not accept.                |
 | Test-only PR that deletes assertions                         | Self-merge, it's just tests       | Human review                                                        | Deleting detection is a behavior change to the safety net.                                                |
-| P2 feature, but you only skimmed half the diff               | Self-merge, looked fine           | Human review, coverage partial                                      | Never clear code you did not read.                                                                        |
+| P2 feature, but you only skimmed half the diff               | Self-merge, looked fine           | Split or human review, coverage partial                             | Never clear code you did not read.                                                                        |
 | Author already got a human approval                          | Self-merge                        | Say the approval satisfies the gate                                 | If a human approved, the requirement is met — report that, don't demand a second.                         |
-| Config-only change: a timeout from 30s to 120s               | Self-merge, it's config           | Depends on surface                                                  | On a payment webhook handler that's P0; on a dev script it's P3.                                          |
+| Config-only change: a timeout from 30s to 120s               | Human review, it's a job          | Depends on whether the hunk is silent/expensive                     | Payment webhook timeout: observe or human. Email-job delay that is not a payment webhook: self-merge.     |
 | Revert of a bad deploy                                       | Human review, it touches P0       | Usually clear it, with the reasoning stated                         | Restoring a known-good state is the lower-risk action. Verify it is a clean revert with no extra changes. |
 | Generated code, large diff                                   | Human review, too big             | Review the generator and config; sample the output                  | Sampling verified output is legitimate full coverage if the generator is unchanged and verified.          |
 | Dependency patch bump, dev-only                              | Human review, dependencies are P1 | P3, self-merge                                                      | The P1 floor is for dependencies that run in production.                                                  |
 | 1,200-line PR, all of it looks fine on a skim                | Human review, it's big            | Recommend splitting, then verdict on the pieces                     | A confident verdict on skimmed code is the failure mode the gate exists to prevent.                       |
-| P2 change you wrote yourself earlier in the session          | Self-merge, you know it's correct | Disclose authorship; self-merge only if P2/P3 and observed          | An author reviewing itself has the same blind spots twice.                                                |
+| P0/P2 change you wrote yourself earlier in the session       | Human review, you authored it     | Disclose authorship; self-merge if observed                         | Authorship raises the observation bar. It is not a veto.                                                  |
 | Behavior "verified" by a test whose name matches the feature | Self-merge, it's tested           | Read the assertions first                                           | Tests named after features routinely assert nothing about them.                                           |
-| Frontend change with passing unit tests                      | Self-merge                        | Self-merge only with a screenshot or an observed run                | Deterministic tests miss visual and interaction behavior.                                                 |
+| Frontend change with passing unit tests, not checkout/auth   | Human review, no screenshot       | Self-merge when coverage is full                                    | Screenshot is preferred evidence, not a gate. Checkout/login/auth UI still needs the flow observed.       |
 
 ---
 
@@ -180,14 +251,15 @@ Cases where the tempting answer is wrong.
 
 State the verdict once, hold it, and stay warm about it:
 
-- "It's a tiny change."
-- "I've done this before / I wrote this module."
+- "It's a tiny change." (Size is not evidence. Observation is.)
+- "I've done this before / I wrote this module." (Authorship is a disclosure, not a veto or a free pass.)
 - "CI is green." (CI green is necessary, not sufficient — it only tests what someone thought to test.)
-- "We'll fix it forward if it breaks." (Not valid where forward-fixing cannot undo the damage: money moved, data deleted, package published, emails sent.)
+- "We'll fix it forward if it breaks." (Not valid where forward-fixing cannot undo the damage *and* that damage was not verified: money moved, data deleted, package published, mail blasted.)
 - "The reviewer will just rubber-stamp it anyway."
 - "It's behind a flag" — valid _only_ if you verified the flag gates every new path and defaults off.
 - "You already reviewed this and it was fine." (Re-run the gate on the new code.)
 - "The agent that wrote it explained why it's correct." (A fluent rationale is not evidence. Ask what was observed.)
+- "It's user-facing / it's an email / it's in billing/." (Neighborhood is not blast radius. Open the hunk.)
 
 If the author provides new _evidence_ — a test you missed, a consumer list, a flag you did
 not see, a prior human approval — re-run the gate. Evidence moves the gate; pressure does
@@ -197,12 +269,13 @@ not. When you do change the verdict, say what changed your mind.
 
 ## Reviewer routing
 
-Be specific. "Get a senior engineer to look" is a non-answer.
+Be specific. "Get a senior engineer to look" is a non-answer. Route only when a Gate 2
+trigger actually fired. CODEOWNERS names who to ask, not whether to ask.
 
 | Change                                        | Route to                                                                                      |
 | --------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| Path matched in CODEOWNERS                    | That owner, by name/handle                                                                    |
-| Pricing, plans, quotas, invoicing             | Billing owner; loop in whoever owns pricing decisions if the change alters what customers pay |
+| Path matched in required CODEOWNERS           | That owner, by name/handle — and only if repo policy requires their approval                  |
+| Pricing, plans, quotas, invoicing             | Billing owner; loop in whoever owns pricing decisions if intent is unverified                 |
 | Auth, permissions, tenant scoping, secrets    | Security-responsible engineer                                                                 |
 | Migration, backfill, index on a large table   | Someone with production DB access and lock-behavior context                                   |
 | Public API / SDK contract                     | API owner, plus whoever maintains docs and client libraries                                   |
@@ -223,8 +296,8 @@ seconds.
 ```md
 **✅ SELF-MERGE OK**
 
-- **Criticality:** P[2/3] — [surface], [class]
-- **Why:** No gate fired. [One-sentence boundary: what this cannot reach.]
+- **Criticality:** P[0/1/2/3] — [surface], [class]
+- **Why:** No gate fired. [One-sentence boundary: what this cannot reach. If P0, name what was observed.]
 - **Effort:** n/a
 ```
 
@@ -233,12 +306,12 @@ seconds.
 ```md
 **👥 HUMAN REVIEW REQUIRED**
 
-- **Criticality:** P[0/1] — [surface], [class][, +1: reason]
-- **Why:** Gate [n.n]. [Specific file/fact that fired it.]
+- **Criticality:** P[n] — [surface], [class][, +1: reason]
+- **Why:** Gate [n.n]. [Specific file/fact that fired it — unverified path, missing intent, found history, repo policy.]
 - **Reviewer:** [name or role]
 - **Focus on:** [1–3 concrete items]
 - **Effort:** ~[N] minutes, [which files matter]
-- **To self-merge next time:** [concrete change, or "this surface always routes to a human"]
+- **To self-merge next time:** [concrete verification or stated intent — never "this surface always routes to a human"]
 ```
 
 **Blocked:**
@@ -249,7 +322,7 @@ seconds.
 - **Criticality:** P[n] — [surface], [class]
 - **Why:** Gate 1. [The defect, with file and line.]
 - **Fix:** [specific fix, referencing an existing pattern where one exists]
-- **After the fix:** [self-merge / still human review, and why]
+- **After the fix:** [self-merge if the blocker is observed / still human review if a Gate 2 trigger remains, and why]
 ```
 
 ---
