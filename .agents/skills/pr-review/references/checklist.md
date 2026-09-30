@@ -9,6 +9,13 @@ Use this checklist privately. Do not output every item.
 - [ ] Did I apply the reversibility modifier only when revert cannot restore already-happened customer state?
 - [ ] Did I check CODEOWNERS as routing (and as a gate only if repo policy requires that approval)?
 
+## ClickUp ticket (only if the PR title has `[CU-<id>]`)
+
+- [ ] Did I match the token in the PR title only — and skip ClickUp entirely when it is absent?
+- [ ] Did I fetch the ticket description (`CU-<id>` first, then bare `<id>`)?
+- [ ] Did I compare the ticket's core ask to the diff's behavior, not its wording?
+- [ ] Divergent or missing core ask → major, Gate 1 BLOCKED; vague ticket or unavailable ticket → question or note?
+
 ## Evidence gate for each issue
 
 - [ ] Is this introduced or worsened by the PR?

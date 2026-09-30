@@ -10,7 +10,8 @@ description: >
   "sanity check before I push", or "does this look clean". Covers correctness,
   security, contracts, blast radius, prior failed fixes in the same code path, tests,
   maintainability, and regressions while aggressively avoiding noisy false positives.
-  Designed to work reliably even with smaller/cheaper models.
+  When the PR title contains `[CU-<ticket number>]`, reads the ClickUp ticket and
+  verifies the diff builds the feature the ticket describes. Designed to work reliably even with smaller/cheaper models.
 ---
 
 # PR Review Skill
@@ -50,6 +51,7 @@ decision is the part the author acts on first.
 Step 1  Get the diff
 Step 2  Map the PR
 Step 2.1 Classify criticality (P0–P3)
+Step 2.2 ClickUp ticket correspondence (only if the PR title has [CU-<id>])
 Step 2.5 Understand the codebase / trace blast radius
 Step 2.6 Harvest repo signals (CODEOWNERS, rules files, CI)
 Step 2.7 Prior-attempt forensics (has this been "fixed" before?)
@@ -255,6 +257,31 @@ Tiering exists to focus effort, not to make everything scary.
 
 ---
 
+## Step 2.2 — ClickUp ticket correspondence (conditional)
+
+Run this step **only** when the PR title matches `\[CU-([A-Za-z0-9-]+)\]` (e.g.
+`[CU-1234] Cache plate lookups`). If the title has no such token, or there is no PR
+title, skip it: do not call ClickUp and do not look for ticket ids in the body,
+branch, or commits. The review proceeds as normal.
+
+When the token is present:
+
+1. Read the ticket with `clickup_get_task` and `include: ["description"]`. Try
+   `CU-<token>` as a custom id first, then the bare `<token>`.
+2. Extract the ticket's core ask as 1–3 concrete behavior statements.
+3. Map each ask to changed hunks. Judge the behavior, not wording or file layout.
+4. Record a verdict: **Corresponds**, **Partial**, **Divergent**, or **Not verified**.
+
+A **Divergent** diff (it builds a different feature than the ticket asks for) or a
+**Partial** diff missing the ticket's core ask is a **major** finding that defeats
+the PR's stated purpose → Gate 1, BLOCKED. A vague ticket with a reasonable reading
+is a question, never a divergence. An unavailable or empty ticket is a note, not a
+gate. The check is read-only: never comment on or update the ticket.
+
+Lookup order, rubric, edge cases, and output format: `references/clickup-ticket.md`.
+
+---
+
 ## Step 2.5 — Understand the codebase before judging large changes
 
 For large PRs, unfamiliar repos, or changes touching shared utilities, do not start by
@@ -453,6 +480,7 @@ Do the review in passes. This keeps cheaper models from missing cross-file issue
 Ask:
 
 - Does the implementation actually match the PR title/description?
+- If the title carries `[CU-<id>]`, does the diff build what the ClickUp ticket asks for (Step 2.2)?
 - Did it remove existing behavior accidentally?
 - Are old callers, clients, query params, response shapes, env names, or data formats still compatible?
 - Is there a migration or rollout plan if the behavior changes?
@@ -865,7 +893,7 @@ recommend a split rather than issuing a confident verdict on code you skimmed.
 ### Gate 1 — Blockers (any one → BLOCKED)
 
 - Any unresolved **critical** finding.
-- A **major** finding that defeats the PR's stated purpose.
+- A **major** finding that defeats the PR's stated purpose — including a diff that diverges from the `[CU-<id>]` ticket in the title (Step 2.2).
 - Auth, authorization, or tenant-isolation check missing on a path that reads or writes data.
 - Secret, key, token, or credential committed or logged.
 - Destructive migration or data-deleting code without a verified rollback or backup path.
@@ -985,6 +1013,17 @@ decision above is separate.]
 
 ---
 
+### Ticket correspondence
+
+[Only when the PR title contains `[CU-<id>]`; omit otherwise.]
+
+**[CU-<id>] [ticket name]** — [link if returned] — **Corresponds / Partial / Divergent / Not verified**
+
+[Quote the ticket's core ask, then name the behavior the diff implements and where —
+or what it built instead. If not verified, say why.]
+
+---
+
 ### What this could break
 
 [Table of grounded scenarios: what breaks / trigger / who's affected / detection /
@@ -1070,6 +1109,7 @@ for P3.]
 - Merge decision: [verdict]
 - Review coverage: [full / partial, and why if partial]
 - History check: [done / not available]
+- ClickUp ticket: [CU-<id> — corresponds / partial / divergent / not verified, or "not in title"]
 - Score: N/5
 - Issues: N total (critical: N, major: N, minor: N, nits: N)
 - Highest risk area: [area]
@@ -1137,6 +1177,7 @@ Before finalizing, ask yourself:
 13. If I said HUMAN REVIEW REQUIRED: did I name a specific reviewer or role, specific focus areas, and the concrete verification that would clear the gate — not "this surface always needs a human"?
 14. Am I gating on unverified risk or a real finding, or on folder name / "it's user-facing" / "it's an email"? Vagueness is my problem to resolve, not the author's to absorb.
 15. Is the merge decision consistent with the findings and the stated coverage — not merely with the tier?
+16. If the PR title had `[CU-<id>]`, did I read the ticket and compare its ask to the diff's behavior — and if the title had no token, did I skip ClickUp entirely?
 
 If not, revise before sending.
 

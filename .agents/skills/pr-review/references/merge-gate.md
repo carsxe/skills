@@ -9,7 +9,7 @@ crisply.
 - [The posture](#the-posture)
 - [Invariants worth copying](#invariants-worth-copying-from-production-auto-approvers)
 - [Decision flow](#decision-flow)
-- [Worked calls](#worked-calls)
+- [Worked calls](#worked-calls) (includes a ClickUp ticket divergence)
 - [Near-misses](#near-misses)
 - [Arguments that do not move the gate](#arguments-that-do-not-move-the-gate)
 - [Reviewer routing](#reviewer-routing)
@@ -169,6 +169,23 @@ New endpoint reads records by ID with no organization scoping.
 > - **Why:** Gate 1. `getVehicleReport(id)` queries by primary key with no `organizationId` predicate; any authenticated caller can read another org's report by guessing or enumerating IDs.
 > - **Fix:** scope the query the way `getPlateLookup()` does in the same module.
 > - **After the fix:** self-merge if a test asserts the org predicate; otherwise human review (unverified authz).
+
+### 🛑 Blocked: diff diverges from the ClickUp ticket
+
+PR title is `[CU-1234] Cache plate lookups`. The ticket asks for plate lookup
+responses to be cached for 24h and invalidated on plate record updates. The diff
+renames dashboard columns and adds a sort toggle; no caching code is touched. Code
+quality is fine and tests pass.
+
+> **🛑 BLOCKED**
+>
+> - **Criticality:** P2 — dashboard UI, behavior change
+> - **Why:** Gate 1. The ticket in the title is the PR's stated purpose. CU-1234 asks for "cache plate lookups for 24h"; the diff changes only `apps/dashboard/src/plates/table.tsx` column labels and sorting. The requested behavior is absent.
+> - **Fix:** implement the caching the ticket describes, or retitle the PR against the ticket this work belongs to.
+> - **After the fix:** normal review of the caching change (P1 scrutiny: cache keys and invalidation).
+
+A diff that matches its ticket gets no extra gate. Correspondence removes the
+"built the wrong thing" risk; it is not a new self-merge requirement.
 
 ### 👥 Human review: clean code, bad history
 

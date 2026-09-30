@@ -27,7 +27,7 @@ npx skills add carsxe/skills --skill carsxe-vehicle-intelligence
 
 | Skill | Description |
 | --- | --- |
-| [`pr-review`](.agents/skills/pr-review/SKILL.md) | Reviews pull requests, classifies criticality, and determines whether self-merge or human review is appropriate. |
+| [`pr-review`](.agents/skills/pr-review/SKILL.md) | Reviews pull requests, classifies criticality, checks the diff against the ClickUp ticket when the title has `[CU-<id>]`, and determines whether self-merge or human review is appropriate. |
 | [`carsxe-vehicle-intelligence`](.agents/skills/carsxe-vehicle-intelligence/SKILL.md) | Production vehicle data from a VIN, plate, or image — decode, recalls, market value, OCR. |
 
 ## Local validation
